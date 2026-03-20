@@ -6,7 +6,7 @@ import * as state from "./state.js";
 import {WriteStreamsProcess, WriteStreamsMock} from "./write-streams.js";
 import {handler} from "./handler.js";
 import {Executor} from "./executor.js";
-import {Argv} from "./argv.js";
+import {Argv, stripGclVariableEnvVars, injectGclVariableEnvVars} from "./argv.js";
 import {AssertionError} from "assert";
 import {Job, cleanupJobResources} from "./job.js";
 import {GitlabRunnerPresetValues} from "./gitlab-preset.js";
@@ -33,6 +33,7 @@ process.on("SIGUSR2", async () => {
 });
 
 (() => {
+    const gclVariableEnvVars = stripGclVariableEnvVars(process.env);
     const yparser = yargs(process.argv.slice(2));
     yparser.parserConfiguration({"greedy-arrays": false})
         .showHelpOnFail(false)
@@ -41,6 +42,7 @@ process.on("SIGUSR2", async () => {
         .command({
             handler: async (argv) => {
                 try {
+                    injectGclVariableEnvVars(argv, gclVariableEnvVars);
                     await handler(argv, new WriteStreamsProcess(), jobs);
                     const failedJobs = Executor.getFailed(jobs);
                     process.exit(failedJobs.length > 0 ? 1 : 0);
@@ -365,6 +367,7 @@ process.on("SIGUSR2", async () => {
                 if (current.startsWith("-")) {
                     completionFilter();
                 } else {
+                    injectGclVariableEnvVars(yargsArgv, gclVariableEnvVars);
                     Argv.build({...yargsArgv, autoCompleting: true})
                         .then(argv => state.getPipelineIid(argv.cwd, argv.stateDir).then(pipelineIid => ({argv, pipelineIid})))
                         .then(({argv, pipelineIid}) => Parser.create(argv, new WriteStreamsMock(), pipelineIid, []))
