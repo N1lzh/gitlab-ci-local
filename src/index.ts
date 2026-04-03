@@ -44,7 +44,7 @@ process.on("SIGUSR2", async () => {
         .command({
             handler: async (argv) => {
                 try {
-                    const arrayKeys = new Set(yparser.getOptions().array.map((k: string) => camelCase(k)));
+                    const arrayKeys = new Set((yparser as any).getOptions().array.map((k: string) => camelCase(k)) as string[]);
                     splitSemicolonEnvVars(argv, arrayKeys, process.env);
                     injectGclVariableEnvVars(argv, gclVariableEnvVars);
                     await handler(argv, new WriteStreamsProcess(), jobs);
