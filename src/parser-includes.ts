@@ -3,11 +3,11 @@ import {Utils} from "./utils.js";
 import fs from "fs-extra";
 import {WriteStreams} from "./write-streams.js";
 import {GitData} from "./git-data.js";
-import assert, {AssertionError} from "assert";
+import assert, {AssertionError} from "node:assert";
 import chalk from "chalk-template";
 import {Parser} from "./parser.js";
 import axios from "axios";
-import path from "path";
+import path from "node:path";
 import prettyHrtime from "pretty-hrtime";
 import semver from "semver";
 import {RE2JS} from "re2js";
@@ -433,11 +433,11 @@ export async function resolveIncludeLocal (pattern: string, cwd: string) {
 
     // `**` matches anything
     const anything = ".*?";
-    pattern = pattern.replaceAll(/\\\*\\\*/g, anything);
+    pattern = pattern.replaceAll(String.raw`\*\*`, anything);
 
     // `*` matches anything except for `/`
     const anything_but_not_slash = "([^/])*?";
-    pattern = pattern.replaceAll(/\\\*/g, anything_but_not_slash);
+    pattern = pattern.replaceAll(String.raw`\*`, anything_but_not_slash);
 
     const re2js = RE2JS.compile(`^${pattern}`);
     return repoFiles.filter((f: any) => re2js.matches(f));
