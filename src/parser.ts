@@ -104,14 +104,21 @@ export class Parser {
         const variables = {...predefinedVariables, ...envMatchedVariables, ...argv.variable};
         const expanded = Utils.expandVariables(variables);
 
-        let yamlDataList: any[] = [{stages: [".pre", "build", "test", "deploy", ".post"]}];
-        const gitlabCiData = await Parser.loadYaml(`${cwd}/${file}`, {}, this.expandVariables, writeStreams);
+        // Load inputs from file and merge with CLI inputs
+        const inputs = await this.loadInputs(cwd, argv);
 
-        yamlDataList = yamlDataList.concat(await ParserIncludes.init(gitlabCiData, {argv, cwd, stateDir, writeStreams, gitData, fetchIncludes, variables: expanded, expandVariables: this.expandVariables, maximumIncludes: argv.maximumIncludes}));
+        // Build root-level inputs from global CLI + global file inputs
+        const fileInputs = inputs._file ?? {};
+        const rootInputs = {...Utils.getGlobalFileInputs(fileInputs), ...inputs._cliGlobal};
+
+        let yamlDataList: any[] = [{stages: [".pre", "build", "test", "deploy", ".post"]}];
+        const gitlabCiData = await Parser.loadYaml(`${cwd}/${file}`, {inputs: rootInputs}, this.expandVariables, writeStreams);
+
+        yamlDataList = yamlDataList.concat(await ParserIncludes.init(gitlabCiData, {argv, cwd, stateDir, writeStreams, gitData, fetchIncludes, variables: expanded, expandVariables: this.expandVariables, maximumIncludes: argv.maximumIncludes, inputs}));
         ParserIncludes.resetCount();
 
         const gitlabCiLocalData = await Parser.loadYaml(`${cwd}/.gitlab-ci-local.yml`, {}, this.expandVariables, writeStreams);
-        yamlDataList = yamlDataList.concat(await ParserIncludes.init(gitlabCiLocalData, {argv, cwd, stateDir, writeStreams, gitData, fetchIncludes, variables: expanded, expandVariables: this.expandVariables, maximumIncludes: argv.maximumIncludes}));
+        yamlDataList = yamlDataList.concat(await ParserIncludes.init(gitlabCiLocalData, {argv, cwd, stateDir, writeStreams, gitData, fetchIncludes, variables: expanded, expandVariables: this.expandVariables, maximumIncludes: argv.maximumIncludes, inputs}));
         ParserIncludes.resetCount();
 
         const gitlabData: any = deepExtend({}, ...yamlDataList);
@@ -226,6 +233,24 @@ export class Parser {
         this.jobs.forEach((job) => {
             job.producers = Producers.init(this.jobs, this.stages, job);
         });
+    }
+
+    private async loadInputs (cwd: string, argv: Argv): Promise<{[key: string]: any}> {
+        const inputsFile = argv.inputsFile;
+        const inputsFilePath = path.isAbsolute(inputsFile) ? inputsFile : `${cwd}/${inputsFile}`;
+        let fileInputs: {[key: string]: any} = {};
+
+        if (fs.existsSync(inputsFilePath)) {
+            const content = await fs.readFile(inputsFilePath, "utf8");
+            try {
+                fileInputs = yaml.load(content) as {[key: string]: any} ?? {};
+            } catch (e: any) {
+                throw new Error(`Failed to parse inputs file ${inputsFilePath}: ${e.message}`, {cause: e});
+            }
+        }
+
+        const cliInput = argv.input;
+        return {_file: fileInputs, _cliGlobal: cliInput._global, _cliComponents: cliInput._components};
     }
 
     static async loadYaml (filePath: string, ctx: any = {}, expandVariables: boolean = true, writeStreams?: WriteStreams): Promise<any> {

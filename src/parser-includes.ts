@@ -22,6 +22,7 @@ type ParserIncludesInitOptions = {
     variables: {[key: string]: string};
     expandVariables: boolean;
     maximumIncludes: number;
+    inputs: {[key: string]: any};
 };
 
 type ParsedComponent = {
@@ -54,7 +55,13 @@ export class ParserIncludes {
     }
 
     static async init (gitlabData: any, opts: ParserIncludesInitOptions): Promise<any[]> {
-        const {argv} = opts;
+        const {argv, inputs: inputsConfig} = opts;
+        const fileInputs = inputsConfig._file ?? {};
+        const cliGlobalInputs = inputsConfig._cliGlobal ?? {};
+        const cliComponentInputs = inputsConfig._cliComponents ?? {};
+
+        const isStructured = Utils.isStructuredInputsFile(fileInputs);
+        const globalInputs = {...Utils.getGlobalFileInputs(fileInputs), ...cliGlobalInputs};
         this.count++;
         assert(
             this.count <= opts.maximumIncludes + 1, // 1st init call is not counted
@@ -116,14 +123,16 @@ export class ParserIncludes {
                     throw new AssertionError({message: `Local include file cannot be found ${value["local"]}`});
                 }
                 for (const localFile of files) {
-                    const content = await Parser.loadYaml(localFile, {inputs: value.inputs ?? {}}, expandVariables, writeStreams);
+                    const mergedInputs = {...(value.inputs ?? {}), ...globalInputs};
+                    const content = await Parser.loadYaml(localFile, {inputs: mergedInputs}, expandVariables, writeStreams);
                     includeDatas = includeDatas.concat(await this.init(content, opts));
                 }
             } else if (value["project"]) {
                 for (const fileValue of Array.isArray(value["file"]) ? value["file"] : [value["file"]]) {
+                    const mergedInputs = {...(value.inputs ?? {}), ...globalInputs};
                     const fileDoc = await Parser.loadYaml(
                         `${cwd}/${stateDir}/includes/${gitData.remote.host}/${value["project"]}/${value["ref"] || "HEAD"}/${fileValue}`
-                        , {inputs: value.inputs || {}}
+                        , {inputs: mergedInputs}
                         , expandVariables, writeStreams);
                     // Expand local includes inside a "project"-like include
                     fileDoc["include"] = this.expandInnerLocalIncludes(fileDoc["include"], value["project"], value["ref"], opts);
@@ -148,21 +157,28 @@ export class ParserIncludes {
                 assert(file !== null, `This GitLab CI configuration is invalid: component: \`${value["component"]}\`. One of the files [${files}] must exist in \`${component.domain}` +
                                     (component.port ? `:${component.port}` : "") + `/${component.projectPath}\``);
 
-                const fileDoc = await Parser.loadYaml(file, {inputs: value.inputs || {}}, expandVariables, writeStreams);
+                // Extract component name for component-specific inputs
+                const componentName = component.name.replace(/^templates\//, "");
+                const fileComponentInputs = isStructured ? (fileInputs[componentName] ?? {}) : {};
+                const cliComponentSpecificInputs = cliComponentInputs[componentName] ?? {};
+                const mergedInputs = {...(value.inputs ?? {}), ...globalInputs, ...fileComponentInputs, ...cliComponentSpecificInputs};
+                const fileDoc = await Parser.loadYaml(file, {inputs: mergedInputs}, expandVariables, writeStreams);
                 // Expand local includes inside to a "project"-like include
                 fileDoc["include"] = this.expandInnerLocalIncludes(fileDoc["include"], component.projectPath, component.ref, opts);
                 includeDatas = includeDatas.concat(await this.init(fileDoc, opts));
             } else if (value["template"]) {
                 const {project, ref, file, domain} = this.covertTemplateToProjectFile(value["template"]);
                 const fsUrl = Utils.fsUrl(`https://${domain}/${project}/-/raw/${ref}/${file}`);
+                const mergedInputs = {...(value.inputs ?? {}), ...globalInputs};
                 const fileDoc = await Parser.loadYaml(
-                    `${cwd}/${stateDir}/includes/${fsUrl}`, {inputs: value.inputs || {}}, expandVariables, writeStreams,
+                    `${cwd}/${stateDir}/includes/${fsUrl}`, {inputs: mergedInputs}, expandVariables, writeStreams,
                 );
                 includeDatas = includeDatas.concat(await this.init(fileDoc, opts));
             } else if (value["remote"]) {
                 const fsUrl = Utils.fsUrl(value["remote"]);
+                const mergedInputs = {...(value.inputs ?? {}), ...globalInputs};
                 const fileDoc = await Parser.loadYaml(
-                    `${cwd}/${stateDir}/includes/${fsUrl}`, {inputs: value.inputs || {}}, expandVariables, writeStreams,
+                    `${cwd}/${stateDir}/includes/${fsUrl}`, {inputs: mergedInputs}, expandVariables, writeStreams,
                 );
                 includeDatas = includeDatas.concat(await this.init(fileDoc, opts));
             } else {
