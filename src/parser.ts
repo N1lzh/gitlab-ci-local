@@ -388,13 +388,16 @@ export class Parser {
 
                         let componentValue
                         const properties = [ "name", "reference", "version", "sha" ];
+                        let foundKey = false;
                         properties.forEach(property => {
                             if (property === interpolationKey) {
+                                foundKey = true;
                                 componentValue = component[interpolationKey];
                             }
                         })
 
-                        return firstChar + secondChar + JSON.stringify(componentValue) + lastChar; 
+                        assert(foundKey, chalk`This GitLab CI configuration is invalid: \`{blueBright ${ctx.configFilePath}}\`: unknown interpolation key: \`${interpolationKey}\`.`);
+                        return firstChar + secondChar + componentValue + lastChar; 
                     }
                 );
 
