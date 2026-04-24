@@ -493,6 +493,11 @@ export function getComponentSha(ctx: any, effectiveRef: string) {
         return Utils.syncSpawn(["git", "rev-parse", effectiveRef], ctx.cwd).stdout.trimEnd();
     }
 
+    // effectiveRef may already be a sha, if so return it directly
+    if (/^[0-9a-f]{40}$/.test(effectiveRef)) {
+        return effectiveRef;
+    }
+
     let stdout;
     if (ctx.remote.schema == "git" || ctx.remote.schema == "ssh") {
         stdout = Utils.syncSpawn(["git", "ls-remote", `git@${ctx.domain}:${ctx.projectPath}`]).stdout;
@@ -501,7 +506,9 @@ export function getComponentSha(ctx: any, effectiveRef: string) {
     }
 
     const match = stdout.split("\n").find(line =>
-        line.endsWith(`refs/tags/${effectiveRef}`) || line.endsWith(`refs/heads/${effectiveRef}`)
+        line.endsWith(`refs/tags/${effectiveRef}^{} `) ||
+        line.endsWith(`refs/tags/${effectiveRef}`) ||
+        line.endsWith(`refs/heads/${effectiveRef}`)
     );
 
     assert(match, `Could not resolve commit SHA for ${effectiveRef} in ${ctx.projectPath}`);
