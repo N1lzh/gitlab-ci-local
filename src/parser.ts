@@ -394,7 +394,7 @@ export class Parser {
                             }
                         })
 
-                        return firstChar + secondChar + componentValue + lastChar; 
+                        return firstChar + secondChar + JSON.stringify(componentValue) + lastChar; 
                     }
                 );
 
