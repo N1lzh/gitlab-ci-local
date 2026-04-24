@@ -394,7 +394,6 @@ export class Parser {
                             }
                         })
 
-                        assert(componentValue, chalk`This GitLab CI configuration is invalid: \`{blueBright ${ctx.configFilePath}}\`: unknown interpolation key: \`${interpolationKey}\`.`);
                         return firstChar + secondChar + componentValue + lastChar; 
                     }
                 );
